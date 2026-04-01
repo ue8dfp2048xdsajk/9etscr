@@ -8,6 +8,7 @@ app.get("/search", async (req, res) => {
   try {
     const keyword = req.query.q || "wallet";
 
+    // Fetch Etsy search page
     const searchRes = await fetch(
       `https://www.etsy.com/search?q=${encodeURIComponent(keyword)}`,
       {
@@ -21,10 +22,20 @@ app.get("/search", async (req, res) => {
     const $ = cheerio.load(html);
 
     const links = [];
+
+    // Extract listing links
     $('a[href*="/listing/"]').each((i, el) => {
       const href = $(el).attr("href");
-      if (href && !links.includes(href)) {
-        links.push(href.split("?")[0]);
+      if (!href) return;
+
+      const cleanHref = href.split("?")[0];
+
+      const fullUrl = cleanHref.startsWith("http")
+        ? cleanHref
+        : `https://www.etsy.com${cleanHref}`;
+
+      if (!links.includes(fullUrl)) {
+        links.push(fullUrl);
       }
     });
 
@@ -33,28 +44,33 @@ app.get("/search", async (req, res) => {
     const results = [];
 
     for (const url of uniqueLinks) {
-      const pageRes = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0"
+      try {
+        const pageRes = await fetch(url, {
+          headers: {
+            "User-Agent": "Mozilla/5.0"
+          }
+        });
+
+        const pageHtml = await pageRes.text();
+
+        let inCarts = null;
+
+        const match = pageHtml.match(/in\s+(\d+)\s+carts/i);
+
+        if (match) {
+          inCarts = parseInt(match[1]);
+        } else if (pageHtml.toLowerCase().includes("in demand")) {
+          inCarts = "in demand";
         }
-      });
 
-      const pageHtml = await pageRes.text();
+        const $page = cheerio.load(pageHtml);
+        const title = $page("title").text();
 
-      let inCarts = null;
+        results.push({ title, url, inCarts });
 
-      const match = pageHtml.match(/in\s+(\d+)\s+carts/i);
-
-      if (match) {
-        inCarts = parseInt(match[1]);
-      } else if (pageHtml.toLowerCase().includes("in demand")) {
-        inCarts = "in demand";
+      } catch (err) {
+        console.error("Error scraping product:", err.message);
       }
-
-      const $page = cheerio.load(pageHtml);
-      const title = $page("title").text();
-
-      results.push({ title, url, inCarts });
     }
 
     res.json(results);
