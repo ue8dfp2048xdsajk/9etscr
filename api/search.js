@@ -1,10 +1,12 @@
-import { chromium } from "playwright";
+import chromium from "chrome-aws-lambda";
 
 export default async function handler(req, res) {
   const keyword = req.query.q || "wallet";
 
-  const browser = await chromium.launch({
-    args: ["--no-sandbox"]
+  const browser = await chromium.puppeteer.launch({
+    args: chromium.args,
+    executablePath: await chromium.executablePath,
+    headless: true,
   });
 
   const page = await browser.newPage();
@@ -15,7 +17,7 @@ export default async function handler(req, res) {
     els.map(el => el.href)
   );
 
-  const uniqueLinks = [...new Set(links)].slice(0, 10);
+  const uniqueLinks = [...new Set(links)].slice(0, 5);
 
   const results = [];
 
@@ -23,7 +25,7 @@ export default async function handler(req, res) {
     const itemPage = await browser.newPage();
     await itemPage.goto(url);
 
-    const text = await itemPage.textContent("body");
+    const text = await itemPage.evaluate(() => document.body.innerText);
 
     let inCarts = null;
 
