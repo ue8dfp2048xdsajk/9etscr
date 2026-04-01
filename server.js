@@ -7,7 +7,15 @@ app.get("/search", async (req, res) => {
   try {
     const keyword = req.query.q || "wallet";
 
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({
+  headless: true,
+  args: [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu"
+  ]
+});
     const page = await browser.newPage();
 
     await page.goto(`https://www.etsy.com/search?q=${encodeURIComponent(keyword)}`);
