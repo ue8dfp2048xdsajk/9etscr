@@ -1,9 +1,11 @@
 {
   "name": "etsy-scraper",
   "version": "1.0.0",
+  "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "postinstall": "npx playwright install chromium"
   },
   "dependencies": {
     "playwright": "^1.40.0",
