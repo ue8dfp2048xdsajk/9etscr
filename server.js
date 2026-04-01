@@ -1,5 +1,6 @@
 import express from "express";
-import { chromium } from "playwright";
+import fetch from "node-fetch";
+import * as cheerio from "cheerio";
 
 const app = express();
 
@@ -7,54 +8,54 @@ app.get("/search", async (req, res) => {
   try {
     const keyword = req.query.q || "wallet";
 
-    const browser = await chromium.launch({
-  headless: true,
-  args: [
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-gpu"
-  ]
-});
-    const page = await browser.newPage();
-
-    await page.goto(`https://www.etsy.com/search?q=${encodeURIComponent(keyword)}`);
-
-    await page.waitForTimeout(3000); // wait for page load
-
-    // ONLY get first few links
-    const links = await page.$$eval('a[href*="/listing/"]', els =>
-      [...new Set(els.map(el => el.href))].slice(0, 2)
+    const searchRes = await fetch(
+      `https://www.etsy.com/search?q=${encodeURIComponent(keyword)}`,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0"
+        }
+      }
     );
+
+    const html = await searchRes.text();
+    const $ = cheerio.load(html);
+
+    const links = [];
+    $('a[href*="/listing/"]').each((i, el) => {
+      const href = $(el).attr("href");
+      if (href && !links.includes(href)) {
+        links.push(href.split("?")[0]);
+      }
+    });
+
+    const uniqueLinks = links.slice(0, 3);
 
     const results = [];
 
-    for (const url of links) {
-      const itemPage = await browser.newPage();
-      await itemPage.goto(url);
+    for (const url of uniqueLinks) {
+      const pageRes = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0"
+        }
+      });
 
-      await itemPage.waitForTimeout(2000);
-
-      const text = await itemPage.evaluate(() => document.body.innerText);
+      const pageHtml = await pageRes.text();
 
       let inCarts = null;
 
-      const match = text.match(/in\s+(\d+)\s+carts/i);
+      const match = pageHtml.match(/in\s+(\d+)\s+carts/i);
 
       if (match) {
         inCarts = parseInt(match[1]);
-      } else if (text.toLowerCase().includes("in demand")) {
+      } else if (pageHtml.toLowerCase().includes("in demand")) {
         inCarts = "in demand";
       }
 
-      const title = await itemPage.title();
+      const $page = cheerio.load(pageHtml);
+      const title = $page("title").text();
 
       results.push({ title, url, inCarts });
-
-      await itemPage.close();
     }
-
-    await browser.close();
 
     res.json(results);
 
